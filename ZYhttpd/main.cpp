@@ -4,11 +4,13 @@
 //@Author           NicoleRobin
 //@Date             2015/02/09
 //*****************************************************************************
+#include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <errno.h>
 #include <pthread.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -20,8 +22,8 @@ using namespace std;
  
 #define BUFFER_SIZE 1024
 #define HOST "127.0.0.1"
+#define ERROR "error.html"
 #define INDEX "index.html"
-#define PORT 9000
 #define HEADER "\
 HTTP/1.1 200 OK\r\n\
 Content-Type: text/html; charset=UTF-8\r\n\
@@ -38,13 +40,42 @@ string ParseUrl(string strRecv);
  
 int main(int argc, char **argv)
 {
+	int iPort = 0;
+	if (argc == 2)
+	{
+		iPort = atoi(argv[1]);
+	}
+	else if (argc == 3)
+	{
+		if (strcmp(argv[1], "-D") == 0)
+		{
+			int iRet = daemon(1, 1);
+			if (iRet != 0)
+			{
+				printf("daemon failed, errno[%d], error[%s]\n", errno, strerror(errno));
+				return -1;
+			}
+
+		}
+		else
+		{
+			printf("Error parameter[%s]\n", argv[1]);
+			return -1;
+		}
+		iPort = atoi(argv[2]);
+	}
+	else
+	{
+		printf("Usage:%s port or %s -D port\n", basename(argv[0]), basename(argv[0]));
+		return -1;
+	}
+
     // define and init an server sockaddr
     sockaddr_in addrServer;
+	memset(&addrServer, 0, sizeof(addrServer));
     addrServer.sin_family = AF_INET;
-	// addrServer.sin_addr.s_addr = inet_addr("192.168.0.160");
     addrServer.sin_addr.s_addr = INADDR_ANY;
-    addrServer.sin_port = htons(PORT);
-	memset(addrServer.sin_zero, 0, 8);
+    addrServer.sin_port = htons(iPort);
  
     // create socket
 	int socketServer = socket(AF_INET, SOCK_STREAM, 0);
@@ -62,7 +93,7 @@ int main(int argc, char **argv)
     }
  
     // listen
-    printf("Listening on port: %d ... \n", PORT);
+    printf("Listening on port: %d ... \n", iPort);
     if (-1 == listen(socketServer, 10))
     {
         printf("Listen failed!");
@@ -138,7 +169,7 @@ void *thread(void *arg)
 	string strPath = ParseUrl(buffer);
 	if (strPath.empty())
 	{
-		strPath = INDEX;
+		strPath = ERROR;
 	}
 	// response 
 	// send header
@@ -151,7 +182,7 @@ void *thread(void *arg)
 	ifstream fin(strPath.c_str(), ios::in | ios::binary);
 	if (!fin.is_open())
 	{
-		fin.open(INDEX, ios::in | ios::binary);
+		fin.open(ERROR, ios::in | ios::binary);
 	}
 	memset(buffer, 0, BUFFER_SIZE);
 	while (fin.read(buffer, BUFFER_SIZE - 1))

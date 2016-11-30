@@ -1,8 +1,9 @@
 CC = g++
 
 FLAG = $(DEBUGFLAG)
-main:main.cpp
-	g++ -o $@ $< $(FLAG) -lrt
+
+zyhttpd: main.cpp
+	g++ -o $@ $< $(FLAG) -pthread -lrt
 
 clean:
-	rm -rf *.o main
+	rm -rf *.o zyhttpd
