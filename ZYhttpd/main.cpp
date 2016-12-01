@@ -81,14 +81,14 @@ int main(int argc, char **argv)
 	int socketServer = socket(AF_INET, SOCK_STREAM, 0);
     if (socketServer == -1)
     {
-        printf("Create socket error!");
+        printf("Create socket error, errno[%d], error[%s]!\n", errno, strerror(errno));
         return 1;
     }
  
     // bind server socket host
     if (-1 == bind(socketServer, (sockaddr*)&addrServer, sizeof(addrServer)))
     {
-        printf("Bind server host failed!\nerrno : %d\n", errno);
+        printf("Bind server host failed, errno[%d], error[%s]!\n", errno, strerror(errno));
         return 1;
     }
  
@@ -144,7 +144,9 @@ string ParseUrl(string strRecv)
 	{
 		strUrl = strUrl.substr(1, strUrl.length() - 1);
 #ifdef DEBUG
+		printf("strUrl begin\n");
 		printf("%s\n", strUrl.c_str());
+		printf("strUrl end\n");
 #endif
 	}
 	return strUrl;
@@ -153,29 +155,32 @@ string ParseUrl(string strRecv)
 void *thread(void *arg)
 {
 	int socketClient = *((int*)arg);
-	char buffer[BUFFER_SIZE];
-	memset(buffer, 0, BUFFER_SIZE);
-	if (recv(socketClient, buffer, BUFFER_SIZE, 0) < 0)
+	char szRecvBuffer[BUFFER_SIZE];
+	char szSendBuffer[BUFFER_SIZE];
+	memset(szRecvBuffer, 0, BUFFER_SIZE);
+	if (recv(socketClient, szRecvBuffer, BUFFER_SIZE, 0) < 0)
 	{
 		printf("Recvive data failed!");
 	}
 	else
 	{
 #ifdef DEBUG
-		printf("%s\n", buffer);
+		printf("buffer begin\n");
+		printf("%s\n", szRecvBuffer);
+		printf("buffer end\n");
 #endif
 	}
 	
-	string strPath = ParseUrl(buffer);
+	string strPath = ParseUrl(szRecvBuffer);
 	if (strPath.empty())
 	{
-		strPath = ERROR;
+		strPath = INDEX;
 	}
 	// response 
 	// send header
-	memset(buffer, 0, BUFFER_SIZE);
-	sprintf(buffer, HEADER, GetFileLength(strPath));
-	if (send(socketClient, buffer, strlen(buffer), 0) < 0)
+	memset(szSendBuffer, 0, BUFFER_SIZE);
+	sprintf(szSendBuffer, HEADER, GetFileLength(strPath));
+	if (send(socketClient, szSendBuffer, strlen(szSendBuffer), 0) < 0)
 	{
 		printf("Send data failed!");
 	}
@@ -184,16 +189,22 @@ void *thread(void *arg)
 	{
 		fin.open(ERROR, ios::in | ios::binary);
 	}
-	memset(buffer, 0, BUFFER_SIZE);
-	while (fin.read(buffer, BUFFER_SIZE - 1))
+	memset(szSendBuffer, 0, BUFFER_SIZE);
+	while (fin.read(szSendBuffer, BUFFER_SIZE - 1))
 	{
-		if (send(socketClient, buffer, strlen(buffer), 0) < 0)
+#ifdef DEBUG
+		printf("Send buffer begin\n");
+		// printf("%d\n", szSendBuffer);
+		printf("Send buffer end\n");
+#endif
+		if (send(socketClient, szSendBuffer, strlen(szSendBuffer), 0) < 0)
 		{
 			printf("Send data failed!");
 		}
-		memset(buffer, 0, BUFFER_SIZE);
+		memset(szSendBuffer, 0, BUFFER_SIZE);
 	}
-	if (send(socketClient, buffer, strlen(buffer), 0) < 0)
+
+	if (send(socketClient, szSendBuffer, strlen(szSendBuffer), 0) < 0)
 	{
 		printf("Send data failed!");
 	}

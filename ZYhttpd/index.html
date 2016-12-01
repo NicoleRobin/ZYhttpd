@@ -1,11 +1,48 @@
 <html>
-	<head>
-		<title>Index</title>
-	</head>
-	<body>
-		<center>
-			<h1>Hello ZYhttpd</h1>
-			<h3>The url is not exist : %s</h3>
-		</center>
-	</body>
+<head>
+	<title>Index</title>
+	<style type="text/css">
+		body {
+			margin:0;
+			padding:0;
+			background:#8B8578 url(gradient_bg.png) 0 100px repeat-x;
+			font-family:Verdana;
+			font-size:8pt;
+			overflow:hidden;
+			font-family:sans-serif,helvetica;
+			font-size:0.9em;
+		}
+		
+		#d_header {
+			position:absolute;
+			top:0;
+			left:0;
+			width:100%;
+			height:100px;
+			text-align:center;
+			line-height:100px;
+			background:transparent url(atomic_bg.png) center 0 no-repeat;
+			color:#ffffff;
+			font-size:2.25em;
+			
+			-moz-box-shadow:0px 4px 8px rgba(0,0,0,0.5);
+			-webkit-box-shadow:0px 4px 8px rgba(0,0,0,0.5);
+			box-shadow:0px 6px 8px rgba(0,0,0,0.5);
+		}
+			#d_header .i_header_logo {
+				position:absolute;
+				top:5px;
+				left:15px;
+			}
+		
+	</style>
+</head>
+
+<body>
+	<div id="d_header">
+		Welcome to <strong>zyhttpd</strong>
+		<img class="i_header_logo" src="zyhttpd_logo.png" width="90" height="90">
+	</div>
+</body>
+
 </html>
