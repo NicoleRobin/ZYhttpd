@@ -18,18 +18,32 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <map>
+
+#include "ZYLog.h"
+
 using namespace std;
  
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE (1024 * 1024)
 #define HOST "127.0.0.1"
 #define ERROR "error.html"
 #define INDEX "index.html"
 #define HEADER "\
 HTTP/1.1 200 OK\r\n\
-Content-Type: text/html; charset=UTF-8\r\n\
+Content-Type: text/html\r\n\
 Server: ZYhttp_v1.0.1\r\n\
+Date: Thu, 08 Dec 2016 03:03:17 GMT\r\n\
 Content-Length: %lld\r\n\r\n\
 "
+#define PNG_HEADER "\
+HTTP/1.1 200 OK\r\n\
+Content-Type: image/png\r\n\
+Server: ZYhttp_v1.0.1\r\n\
+Date: Thu, 08 Dec 2016 03:03:17 GMT\r\n\
+Content-Length: %lld\r\n\r\n\
+"
+
+static map<string, string> s_mapContentType;
 
 // get file size
 long long GetFileLength(string strPath);
@@ -37,7 +51,11 @@ long long GetFileLength(string strPath);
 void *thread(void *arg);
 // parse url
 string ParseUrl(string strRecv);
- 
+// parse postfix
+string ParsePostfix(string strPath);
+// init content type map
+void InitContentTypeMap();
+
 int main(int argc, char **argv)
 {
 	int iPort = 0;
@@ -52,21 +70,21 @@ int main(int argc, char **argv)
 			int iRet = daemon(1, 1);
 			if (iRet != 0)
 			{
-				printf("daemon failed, errno[%d], error[%s]\n", errno, strerror(errno));
+				LOG_ERROR("daemon failed, errno[%d], error[%s]", errno, strerror(errno));
 				return -1;
 			}
 
 		}
 		else
 		{
-			printf("Error parameter[%s]\n", argv[1]);
+			LOG_ERROR("Error parameter[%s]", argv[1]);
 			return -1;
 		}
 		iPort = atoi(argv[2]);
 	}
 	else
 	{
-		printf("Usage:%s port or %s -D port\n", basename(argv[0]), basename(argv[0]));
+		LOG_ERROR("Usage:%s port or %s -D port", basename(argv[0]), basename(argv[0]));
 		return -1;
 	}
 
@@ -81,22 +99,30 @@ int main(int argc, char **argv)
 	int socketServer = socket(AF_INET, SOCK_STREAM, 0);
     if (socketServer == -1)
     {
-        printf("Create socket error, errno[%d], error[%s]!\n", errno, strerror(errno));
+        LOG_ERROR("Create socket error, errno[%d], error[%s]!", errno, strerror(errno));
         return 1;
     }
+
+	// reuse addr
+	int iOpt = 1;
+	if (-1 == setsockopt(socketServer, SOL_SOCKET, SO_REUSEADDR, &iOpt, sizeof(iOpt)))
+	{
+		LOG_ERROR("setsockopt error, errno[%d], error[%s]!", errno, strerror(errno));
+		return 1;
+	}
  
     // bind server socket host
     if (-1 == bind(socketServer, (sockaddr*)&addrServer, sizeof(addrServer)))
     {
-        printf("Bind server host failed, errno[%d], error[%s]!\n", errno, strerror(errno));
+        LOG_ERROR("Bind server host failed, errno[%d], error[%s]!", errno, strerror(errno));
         return 1;
     }
  
     // listen
-    printf("Listening on port: %d ... \n", iPort);
+    LOG_ERROR("Listening on port: %d ... ", iPort);
     if (-1 == listen(socketServer, 10))
     {
-        printf("Listen failed!");
+        LOG_ERROR("Listen failed!");
         return 1;
     }
  
@@ -106,17 +132,19 @@ int main(int argc, char **argv)
         sockaddr_in addrClient;
         int nClientAddrLen = sizeof(addrClient);
  
-        int socketClient = accept(socketServer, (sockaddr*)&addrClient, (socklen_t*)&nClientAddrLen);
-        if (socketClient == -1)
+		int *pSocket = new int;
+        *pSocket = accept(socketServer, (sockaddr*)&addrClient, (socklen_t*)&nClientAddrLen);
+		if (*pSocket == -1)
 		{
-			printf("Accept failed!");
+			LOG_ERROR("Accept failed!");
 			break;
 		}
 		else
 		{
-			if (0 != pthread_create(&pid, NULL, thread, &socketClient))
+			LOG_DEBUG("Recv new connect, socket[%d]", *pSocket);
+			if (0 != pthread_create(&pid, NULL, thread, (void*)pSocket))
 			{
-				printf("Create thread failed, errno : %d, error : %s\n", errno, strerror(errno));
+				LOG_ERROR("Create thread failed, errno : %d, error : %s", errno, strerror(errno));
 			}
 		}
     }
@@ -143,32 +171,38 @@ string ParseUrl(string strRecv)
 	if ((!strUrl.empty()) && (strUrl[0] == '/'))
 	{
 		strUrl = strUrl.substr(1, strUrl.length() - 1);
-#ifdef DEBUG
-		printf("strUrl begin\n");
-		printf("%s\n", strUrl.c_str());
-		printf("strUrl end\n");
-#endif
 	}
 	return strUrl;
 }
 
+string ParsePostfix(string strPath)
+{
+	string strPostfix;
+	string::size_type sizeIndex = strPath.find_last_of('.');
+	strPostfix = strPath.substr(sizeIndex + 1);
+
+	return strPostfix;
+}
+
 void *thread(void *arg)
 {
-	int socketClient = *((int*)arg);
+	LOG_DEBUG("In thread");
+	int iSendCnt = 0;
+	int iRecvCnt = 0;
+	int socketClient = *(int*)arg;
+	delete (int*)arg;
 	char szRecvBuffer[BUFFER_SIZE];
 	char szSendBuffer[BUFFER_SIZE];
 	memset(szRecvBuffer, 0, BUFFER_SIZE);
-	if (recv(socketClient, szRecvBuffer, BUFFER_SIZE, 0) < 0)
+	if ((iRecvCnt = recv(socketClient, szRecvBuffer, BUFFER_SIZE - 1, 0)) < 0)
 	{
-		printf("Recvive data failed!");
+		LOG_ERROR("Receive data error, socket[%d], errno[%d], error[%s]", socketClient, errno, strerror(errno));
+		close(socketClient);
+		return (void*)0;
 	}
 	else
 	{
-#ifdef DEBUG
-		printf("buffer begin\n");
-		printf("%s\n", szRecvBuffer);
-		printf("buffer end\n");
-#endif
+		LOG_DEBUG("Recv data succ, socket[%d], data length[%d]", socketClient, iRecvCnt);
 	}
 	
 	string strPath = ParseUrl(szRecvBuffer);
@@ -176,40 +210,92 @@ void *thread(void *arg)
 	{
 		strPath = INDEX;
 	}
+	LOG_DEBUG("strPath=%s", strPath.c_str());
+
 	// response 
 	// send header
-	memset(szSendBuffer, 0, BUFFER_SIZE);
-	sprintf(szSendBuffer, HEADER, GetFileLength(strPath));
-	if (send(socketClient, szSendBuffer, strlen(szSendBuffer), 0) < 0)
+	string strPostfix = ParsePostfix(strPath);
+	LOG_DEBUG("strPostfix=%s", strPostfix.c_str());
+	if (strPostfix.compare("html") == 0)
 	{
-		printf("Send data failed!");
+		memset(szSendBuffer, 0, BUFFER_SIZE);
+		sprintf(szSendBuffer, HEADER, GetFileLength(strPath));
+		if ((iSendCnt = send(socketClient, szSendBuffer, strlen(szSendBuffer), 0)) < 0)
+		{
+			LOG_ERROR("Send data error, socket[%d], errno[%d], error[%s]!", socketClient, errno, strerror(errno));
+			close(socketClient);
+			return (void*)0;
+		}
+		else
+		{
+			LOG_DEBUG("Send data succ, socket[%d], data length[%d]", socketClient, iSendCnt);
+		}
 	}
+	else if (strPostfix.compare("png") == 0)
+	{
+		memset(szSendBuffer, 0, BUFFER_SIZE);
+		sprintf(szSendBuffer, PNG_HEADER, GetFileLength(strPath));
+		if ((iSendCnt = send(socketClient, szSendBuffer, strlen(szSendBuffer), 0)) < 0)
+		{
+			LOG_ERROR("Send data error, socket[%d], errno[%d], error[%s]!", socketClient, errno, strerror(errno));
+			close(socketClient);
+			return (void*)0;
+		}
+		else
+		{
+			LOG_DEBUG("Send data succ, socket[%d], data length[%d]", socketClient, iSendCnt);
+		}
+	}
+	
 	ifstream fin(strPath.c_str(), ios::in | ios::binary);
 	if (!fin.is_open())
 	{
 		fin.open(ERROR, ios::in | ios::binary);
 	}
-	memset(szSendBuffer, 0, BUFFER_SIZE);
-	while (fin.read(szSendBuffer, BUFFER_SIZE - 1))
+
+	while (true)
 	{
-#ifdef DEBUG
-		printf("Send buffer begin\n");
-		// printf("%d\n", szSendBuffer);
-		printf("Send buffer end\n");
-#endif
-		if (send(socketClient, szSendBuffer, strlen(szSendBuffer), 0) < 0)
-		{
-			printf("Send data failed!");
-		}
 		memset(szSendBuffer, 0, BUFFER_SIZE);
+		fin.read(szSendBuffer, BUFFER_SIZE - 1);
+		if (fin.eof())
+		{
+			break;
+		}
+		else
+		{
+			LOG_DEBUG("read %d data from file[%s]", fin.gcount(), strPath.c_str());
+		}
+
+		if ((iSendCnt = send(socketClient, szSendBuffer, fin.gcount(), 0)) < 0)
+		{
+			LOG_ERROR("Send data error, socket[%d], errno[%d], error[%s]!", socketClient, errno, strerror(errno));
+			close(socketClient);
+			return (void*)0;
+		}
+		else
+		{
+			LOG_DEBUG("Send data succ, socket[%d], data length[%d]", socketClient, iSendCnt);
+		}
 	}
 
-	if (send(socketClient, szSendBuffer, strlen(szSendBuffer), 0) < 0)
+	if ((iSendCnt = send(socketClient, szSendBuffer, fin.gcount(), 0)) < 0)
 	{
-		printf("Send data failed!");
+		LOG_ERROR("Send data error, socket[%d], errno[%d], error[%s]!", socketClient, errno, strerror(errno));
+		close(socketClient);
+		return (void*)0;
+	}
+	else
+	{
+		LOG_DEBUG("Send data succ, socket[%d], data length[%d]", socketClient, iSendCnt);
 	}
 	
 	fin.close();
 	close(socketClient);
 	return (void*)0;
+}
+
+void InitContentTypeMap()
+{
+	s_mapContentType.insert(make_pair<string, string>("html", "text/html"));
+	s_mapContentType.insert(make_pair<string, string>("png", "img/"));
 }
