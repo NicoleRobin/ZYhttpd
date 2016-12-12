@@ -297,5 +297,13 @@ void *thread(void *arg)
 void InitContentTypeMap()
 {
 	s_mapContentType.insert(make_pair<string, string>("html", "text/html"));
-	s_mapContentType.insert(make_pair<string, string>("png", "img/"));
+	s_mapContentType.insert(make_pair<string, string>("htm", "text/html"));
+	s_mapContentType.insert(make_pair<string, string>("txt", "text/plain"));
+	s_mapContentType.insert(make_pair<string, string>("h", "text/plain"));
+	s_mapContentType.insert(make_pair<string, string>("c", "text/plain"));
+	s_mapContentType.insert(make_pair<string, string>("cpp", "text/plain"));
+	s_mapContentType.insert(make_pair<string, string>("jpg", "image/jpg"));
+	s_mapContentType.insert(make_pair<string, string>("jpeg", "image/jpeg"));
+	s_mapContentType.insert(make_pair<string, string>("png", "image/png"));
+	s_mapContentType.insert(make_pair<string, string>("pdf", "application/pdf"));
 }
